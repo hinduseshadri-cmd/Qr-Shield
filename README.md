@@ -15,25 +15,26 @@ The application provides a user-friendly dashboard with QR scanning, URL analysi
 - **Scan History:** View previously scanned QR codes and their analysis results.
 - **Downloadable Reports:** Export scan reports in TXT, CSV and JSON formats.
 - **Standalone Mode:** Run the frontend independently without starting the backend server.
+
 ## Application Screenshots
 
 ### 1. Dashboard
-![QR Shield Dashboard](./screenshots/dashboard.png)
+![Dashboard](screenshots/dashboard.png)
 
-### 2. QR Code Scanner
-![QR Code Scanner](./screenshots/qr scanner.png)
+### 2. QR Scanner
+![QR Scanner](screenshots/qr-scanner.png)
 
-### 3. URL Checker Results
-![Threat Detection](./screenshots/url checker.png)
+### 3. Reports
+![Reports](screenshots/reports.png)
 
 ### 4. Scan History
-![Scan History](./screenshots/scan-history.png)
+![Scan History](screenshots/scan-history.png)
 
-### 5.Upload Image 
-![Upload Image](./screenshots/upload image.png)
+### 5. Upload Image
+![Upload Image](screenshots/upload-image.png)
 
-### 6.Reports 
-![Reports](./screenshots/reports.png)
+### 6. URL Checker
+![URL Checker](screenshots/url-checker.png)
 
 
 ## Technologies Used
