@@ -30,7 +30,7 @@ The application provides a user-friendly dashboard with QR scanning, URL analysi
 ### 4. Scan History
 ![Scan History](screenshots/scan-history.png)
 
-### 5. Upload Image
+### 5. Upload Images
 ![Upload Image](screenshots/upload-image.png)
 
 ### 6. URL Checker
