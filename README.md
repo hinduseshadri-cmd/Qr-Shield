@@ -18,16 +18,23 @@ The application provides a user-friendly dashboard with QR scanning, URL analysi
 ## Application Screenshots
 
 ### 1. Dashboard
-![QR Shield Dashboard](screenshots/dashboard.png)
+![QR Shield Dashboard](./screenshots/dashboard.png)
 
 ### 2. QR Code Scanner
-![QR Code Scanner](screenshots/qr-scanner.png)
+![QR Code Scanner](./screenshots/qr scanner.png)
 
-### 3. Threat Detection Results
-![Threat Detection](screenshots/threat-detection.png)
+### 3. URL Checker Results
+![Threat Detection](./screenshots/url checker.png)
 
 ### 4. Scan History
-![Scan History](screenshots/scan-history.png)
+![Scan History](./screenshots/scan-history.png)
+
+### 5.Upload Image 
+![Upload Image](./screenshots/upload image.png)
+
+### 6.Reports 
+![Reports](./screenshots/reports.png)
+
 
 ## Technologies Used
 
