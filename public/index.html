@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Shield — AI-Based QR Attack Detection</title>
+  <style>
+/* QR Shield — styles (light + dark) */
+:root {
+  --bg: #f3f5fa; --bg-2: #ffffff; --bg-3: #eef1f8; --border: #dde2ee;
+  --text: #1b2236; --muted: #6b7490; --primary: #4f6bff; --primary-2: #7a5cff;
+  --safe: #16a34a; --suspicious: #d98a00; --malicious: #dc2626;
+  --safe-bg: rgba(22,163,74,.12); --susp-bg: rgba(217,138,0,.13); --mal-bg: rgba(220,38,38,.12);
+  --shadow: 0 6px 24px rgba(30,40,80,.08); --radius: 14px; --sidebar-w: 250px;
+}
+body.dark-mode {
+  --bg: #0b1020; --bg-2: #141a2e; --bg-3: #1b2340; --border: #263052;
+  --text: #e8ecf8; --muted: #8b95b5; --primary: #6c8cff; --primary-2: #9a7bff;
+  --safe: #34d399; --suspicious: #fbbf24; --malicious: #f87171;
+  --safe-bg: rgba(52,211,153,.13); --susp-bg: rgba(251,191,36,.13); --mal-bg: rgba(248,113,113,.14);
+  --shadow: 0 8px 30px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background .3s, color .3s; }
+.hidden { display: none !important; }
+.mt-1 { margin-top: 1rem; }
+.full-width { width: 100%; }
+a { color: inherit; text-decoration: none; }
+
+/* Sidebar */
+.sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); background: var(--bg-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 50; transition: transform .3s; }
+.sidebar-brand { display: flex; align-items: center; gap: .8rem; padding: 1.3rem 1.2rem; border-bottom: 1px solid var(--border); }
+.brand-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 1.2rem; color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-2)); box-shadow: 0 4px 14px rgba(108,140,255,.4); }
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-name { font-weight: 700; font-size: 1.15rem; }
+.brand-sub { font-size: .72rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: .6rem .8rem; }
+.nav-section-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 1.1rem .6rem .4rem; }
+.nav-item { position: relative; display: flex; align-items: center; gap: .8rem; padding: .7rem .9rem; border-radius: 10px; color: var(--muted); font-size: .92rem; cursor: pointer; transition: all .2s; overflow: hidden; }
+.nav-item i { width: 18px; text-align: center; }
+.nav-item:hover { background: var(--bg-3); color: var(--text); }
+.nav-item.active { background: linear-gradient(90deg, rgba(108,140,255,.18), transparent); color: var(--primary); font-weight: 600; box-shadow: inset 3px 0 0 var(--primary); }
+.nav-glow { display: none; }
+.badge { margin-left: auto; min-width: 22px; padding: .1rem .45rem; text-align: center; font-size: .7rem; font-weight: 700; border-radius: 99px; background: var(--bg-3); color: var(--text); }
+.badge.danger { background: var(--mal-bg); color: var(--malicious); }
+.sidebar-footer { padding: 1rem 1.2rem; border-top: 1px solid var(--border); }
+.threat-meter { display: flex; flex-direction: column; gap: .45rem; font-size: .78rem; color: var(--muted); }
+.meter-bar { height: 8px; border-radius: 99px; background: var(--bg-3); overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--safe), var(--suspicious), var(--malicious)); transition: width .6s; }
+.meter-label { font-weight: 700; letter-spacing: .08em; color: var(--safe); }
+.hamburger { display: none; position: fixed; top: .8rem; left: .8rem; z-index: 60; width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); font-size: 1.1rem; cursor: pointer; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; }
+
+/* Main */
+.main { margin-left: var(--sidebar-w); padding: 2rem 2.2rem 3rem; max-width: 1400px; }
+.page { display: none; animation: fade .3s ease; }
+.page.active { display: block; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-header { margin-bottom: 1.5rem; }
+.page-header h1 { font-size: 1.7rem; display: flex; align-items: center; gap: .7rem; }
+.page-header h1 i { color: var(--primary); }
+.page-header p { color: var(--muted); margin-top: .3rem; }
+.content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.3rem; }
+.card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; box-shadow: var(--shadow); margin-bottom: 1.3rem; }
+.content-grid > .card { margin-bottom: 0; }
+.card-header { display: flex; align-items: center; justify-content: space-between; gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.card-header h3 { font-size: 1.02rem; display: flex; align-items: center; gap: .55rem; }
+.card-header h3 i { color: var(--primary); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; padding: .6rem 1.1rem; border-radius: 10px; border: 1px solid transparent; font-size: .88rem; font-weight: 600; cursor: pointer; transition: all .2s; font-family: inherit; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; box-shadow: 0 4px 14px rgba(108,140,255,.3); }
+.btn-primary:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.08); }
+.btn-ghost { background: transparent; border-color: var(--border); color: var(--text); }
+.btn-ghost:not(:disabled):hover { background: var(--bg-3); }
+.btn-danger { background: var(--mal-bg); color: var(--malicious); border-color: transparent; }
+.btn-danger:hover { background: var(--malicious); color: #fff; }
+.scanner-controls, .report-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* Scanner */
+#qr-reader-container { position: relative; min-height: 320px; border-radius: 12px; overflow: hidden; background: #05070f; display: grid; place-items: center; }
+#qr-reader { width: 100%; border: none !important; }
+#qr-reader video { border-radius: 12px; }
+.scan-overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.scan-overlay.off { display: none; }
+.scan-frame { position: relative; width: 230px; height: 230px; }
+.corner { position: absolute; width: 34px; height: 34px; border: 4px solid var(--primary); }
+.corner.tl { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 10px; }
+.corner.tr { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 10px; }
+.corner.bl { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 10px; }
+.corner.br { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 10px; }
+.scan-line { position: absolute; left: 6px; right: 6px; height: 3px; background: linear-gradient(90deg, transparent, var(--primary), transparent); box-shadow: 0 0 12px var(--primary); animation: scan 2.2s ease-in-out infinite; }
+@keyframes scan { 0%,100% { top: 8px; } 50% { top: calc(100% - 11px); } }
+.scan-tip { position: absolute; bottom: 14px; color: #c9d1f0; font-size: .85rem; background: rgba(0,0,0,.5); padding: .3rem .8rem; border-radius: 99px; }
+
+/* Results */
+.result-placeholder, .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+.placeholder-icon, .empty-state > i { font-size: 2.6rem; opacity: .6; }
+.result-content { display: flex; flex-direction: column; gap: 1rem; }
+.result-badge-container { text-align: center; }
+.result-badge { display: inline-flex; flex-direction: column; align-items: center; gap: .3rem; padding: 1rem 2rem; border-radius: 16px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.result-badge i { font-size: 2rem; }
+.result-badge small { font-weight: 600; letter-spacing: .02em; text-transform: none; opacity: .85; }
+.result-badge.safe, .pill.safe { background: var(--safe-bg); color: var(--safe); }
+.result-badge.suspicious, .pill.suspicious { background: var(--susp-bg); color: var(--suspicious); }
+.result-badge.malicious, .pill.malicious { background: var(--mal-bg); color: var(--malicious); }
+.result-data label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.data-box { margin-top: .35rem; padding: .8rem 1rem; background: var(--bg-3); border: 1px dashed var(--border); border-radius: 10px; font-family: Consolas, monospace; font-size: .85rem; word-break: break-all; max-height: 140px; overflow: auto; }
+.score-bar { height: 8px; border-radius: 99px; background: var(--bg-3); overflow: hidden; margin: .4rem 0 .8rem; }
+.score-bar > div { height: 100%; border-radius: 99px; }
+.score-bar .safe { background: var(--safe); } .score-bar .suspicious { background: var(--suspicious); } .score-bar .malicious { background: var(--malicious); }
+.analysis-summary { font-size: .9rem; margin-bottom: .6rem; }
+.finding { display: flex; gap: .7rem; padding: .6rem .8rem; border-radius: 10px; margin-bottom: .45rem; font-size: .85rem; background: var(--bg-3); border-left: 4px solid var(--muted); }
+.finding.good { border-left-color: var(--safe); } .finding.suspicious { border-left-color: var(--suspicious); } .finding.malicious { border-left-color: var(--malicious); }
+.finding strong { display: block; } .finding span { color: var(--muted); font-size: .8rem; }
+.finding .pts { margin-left: auto; font-weight: 700; white-space: nowrap; color: var(--muted); }
+.spinner { width: 34px; height: 34px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Upload */
+.upload-zone { border: 2px dashed var(--border); border-radius: 14px; padding: 2.2rem 1rem; text-align: center; color: var(--muted); cursor: pointer; transition: all .2s; display: flex; flex-direction: column; gap: .4rem; align-items: center; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: rgba(108,140,255,.07); color: var(--text); }
+.upload-icon { font-size: 2.6rem; color: var(--primary); }
+.link { color: var(--primary); font-weight: 600; text-decoration: underline; }
+.upload-preview { margin-top: 1rem; text-align: center; background: var(--bg-3); border-radius: 12px; padding: .8rem; }
+.upload-preview img { max-width: 100%; max-height: 260px; border-radius: 8px; }
+
+/* Tables */
+.table-wrapper { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.data-table th { text-align: left; padding: .7rem .8rem; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); }
+.data-table td { padding: .75rem .8rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.data-table tr:hover td { background: var(--bg-3); }
+.cell-content { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: .8rem; }
+.pill { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .7rem; border-radius: 99px; font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.row-del { background: none; border: none; color: var(--muted); cursor: pointer; padding: .3rem; }
+.row-del:hover { color: var(--malicious); }
+
+/* Dashboard */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; margin-bottom: 1.3rem; }
+.stat-card { display: flex; align-items: center; gap: 1rem; padding: 1.2rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.stat-icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; font-size: 1.4rem; }
+.stat-card.total .stat-icon { background: rgba(108,140,255,.15); color: var(--primary); }
+.stat-card.safe .stat-icon { background: var(--safe-bg); color: var(--safe); }
+.stat-card.suspicious .stat-icon { background: var(--susp-bg); color: var(--suspicious); }
+.stat-card.malicious .stat-icon { background: var(--mal-bg); color: var(--malicious); }
+.stat-info { display: flex; flex-direction: column; }
+.stat-value { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.stat-label { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+.chart-container { position: relative; height: 290px; }
+
+/* Alerts */
+.alert-item { display: flex; gap: 1rem; padding: 1rem; border-radius: 12px; margin-bottom: .8rem; background: var(--bg-3); border-left: 5px solid var(--malicious); }
+.alert-item.suspicious { border-left-color: var(--suspicious); }
+.alert-icon { font-size: 1.5rem; color: var(--malicious); } .alert-item.suspicious .alert-icon { color: var(--suspicious); }
+.alert-body { flex: 1; min-width: 0; }
+.alert-body .alert-url { font-family: Consolas, monospace; font-size: .82rem; word-break: break-all; margin: .3rem 0; }
+.alert-body small { color: var(--muted); display: block; }
+
+/* URL checker */
+.url-input-group { display: flex; gap: .7rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.text-input { flex: 1; min-width: 220px; padding: .7rem 1rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-size: .92rem; font-family: inherit; }
+.text-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.url-analysis-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+.url-box { padding: 1rem; border-radius: 12px; background: var(--bg-3); }
+.url-box h4 { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .4rem; }
+.url-box.wide { grid-column: 1 / -1; }
+
+/* Reports */
+.report-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .8rem; margin-bottom: 1.2rem; }
+.report-stat { background: var(--bg-3); border-radius: 12px; padding: .9rem; text-align: center; }
+.report-stat b { display: block; font-size: 1.6rem; }
+.report-stat span { font-size: .78rem; color: var(--muted); }
+.report-section-title { margin: 1.2rem 0 .6rem; font-size: .95rem; }
+
+/* Settings */
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.3rem; }
+.settings-grid .card { margin-bottom: 0; }
+.setting-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.setting-item.column { flex-direction: column; align-items: stretch; }
+.setting-info { display: flex; flex-direction: column; } .setting-info small { color: var(--muted); }
+.toggle { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 99px; cursor: pointer; transition: .25s; }
+.toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .25s; }
+.toggle input:checked + .toggle-slider { background: var(--primary); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(22px); }
+.sensitivity-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; }
+.radio-option { cursor: pointer; }
+.radio-option input { display: none; }
+.radio-label { display: flex; flex-direction: column; align-items: center; gap: .25rem; text-align: center; padding: .9rem .4rem; border: 1px solid var(--border); border-radius: 12px; transition: .2s; height: 100%; }
+.radio-label i { font-size: 1.3rem; color: var(--muted); } .radio-label small { color: var(--muted); font-size: .72rem; }
+.radio-option:hover .radio-label { background: var(--bg-3); }
+.radio-option.active .radio-label { border-color: var(--primary); background: rgba(108,140,255,.1); }
+.radio-option.active .radio-label i { color: var(--primary); }
+
+/* About */
+.about-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.3rem; }
+.about-grid .card { margin-bottom: 0; }
+.about-hero { grid-column: 1 / -1; text-align: center; padding: 2rem; }
+.about-logo { width: 70px; height: 70px; margin: 0 auto .8rem; border-radius: 20px; display: grid; place-items: center; font-size: 2rem; color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-2)); }
+.about-hero p { max-width: 640px; margin: .6rem auto 0; color: var(--muted); }
+.about-list { list-style: none; display: flex; flex-direction: column; gap: .6rem; font-size: .9rem; }
+.about-list i { color: var(--safe); margin-right: .5rem; }
+.tech-grid { display: flex; flex-wrap: wrap; gap: .6rem; }
+.tech-badge { padding: .45rem .8rem; background: var(--bg-3); border-radius: 99px; font-size: .8rem; display: flex; align-items: center; gap: .45rem; }
+.rules-list { display: flex; flex-direction: column; gap: .6rem; }
+.rule-item { display: flex; gap: .8rem; align-items: center; padding: .6rem .8rem; border-radius: 10px; background: var(--bg-3); border-left: 4px solid var(--muted); }
+.rule-item.malicious { border-left-color: var(--malicious); } .rule-item.suspicious { border-left-color: var(--suspicious); } .rule-item.safe { border-left-color: var(--safe); }
+.rule-item small { display: block; color: var(--muted); font-size: .78rem; }
+
+/* Toasts */
+.toast-container { position: fixed; right: 1.2rem; bottom: 1.2rem; display: flex; flex-direction: column; gap: .6rem; z-index: 100; }
+.toast { padding: .8rem 1.1rem; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--border); border-left: 4px solid var(--primary); box-shadow: var(--shadow); font-size: .88rem; animation: slideIn .3s ease; max-width: 340px; }
+.toast.success { border-left-color: var(--safe); } .toast.error { border-left-color: var(--malicious); } .toast.warn { border-left-color: var(--suspicious); }
+@keyframes slideIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+
+/* Responsive */
+@media (max-width: 1000px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); } .sidebar.open { transform: none; }
+  .sidebar-overlay.show { display: block; }
+  .hamburger { display: block; }
+  .main { margin-left: 0; padding: 4.2rem 1rem 2rem; }
+  .content-grid, .about-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) { .sensitivity-options { grid-template-columns: 1fr; } .stat-value { font-size: 1.4rem; } }
+
+@media print {
+  .sidebar, .hamburger, .page-header, .report-actions, .toast-container { display: none !important; }
+  .main { margin: 0; padding: 0; } body { background: #fff; color: #000; }
+  .page { display: none !important; } #page-reports { display: block !important; }
+  .card { box-shadow: none; border: none; }
+}
+
+.mode-banner { display: flex; gap: .7rem; align-items: flex-start; margin-bottom: 1.2rem; padding: .8rem 1rem; border-radius: 12px; background: var(--susp-bg); color: var(--text); border: 1px solid var(--suspicious); font-size: .85rem; }
+.mode-banner i { color: var(--suspicious); margin-top: .15rem; } .mode-banner code { background: var(--bg-3); padding: .05rem .35rem; border-radius: 5px; }
+</style>
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- QR Scanning -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- jsQR (decodes uploaded images in standalone mode) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="dark-mode">
+
+<!-- ════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><i class="fa-solid fa-shield-halved"></i></div>
+    <div class="brand-text">
+      <span class="brand-name">QR Shield</span>
+      <span class="brand-sub">AI Security</span>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Scanner</div>
+    <a class="nav-item active" data-page="scanner" href="#">
+      <i class="fa-solid fa-qrcode"></i><span>QR Scanner</span>
+      <div class="nav-glow"></div>
+    </a>
+    <a class="nav-item" data-page="upload" href="#">
+      <i class="fa-solid fa-upload"></i><span>Upload QR Image</span>
+      <div class="nav-glow"></div>
+    </a>
+
+    <div class="nav-section-label">Analytics</div>
+    <a class="nav-item" data-page="history" href="#">
+      <i class="fa-solid fa-clock-rotate-left"></i><span>Scan History</span>
+      <span class="badge" id="history-badge">0</span>
+      <div class="nav-glow"></div>
+    </a>
+    <a class="nav-item" data-page="dashboard" href="#">
+      <i class="fa-solid fa-chart-pie"></i><span>AI Dashboard</span>
+      <div class="nav-glow"></div>
+    </a>
+    <a class="nav-item" data-page="alerts" href="#">
+      <i class="fa-solid fa-triangle-exclamation"></i><span>Threat Alerts</span>
+      <span class="badge danger" id="alert-badge">0</span>
+      <div class="nav-glow"></div>
+    </a>
+
+    <div class="nav-section-label">Tools</div>
+    <a class="nav-item" data-page="urlchecker" href="#">
+      <i class="fa-solid fa-link"></i><span>URL Checker</span>
+      <div class="nav-glow"></div>
+    </a>
+    <a class="nav-item" data-page="reports" href="#">
+      <i class="fa-solid fa-file-lines"></i><span>Reports</span>
+      <div class="nav-glow"></div>
+    </a>
+
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" data-page="settings" href="#">
+      <i class="fa-solid fa-gear"></i><span>Settings</span>
+      <div class="nav-glow"></div>
+    </a>
+    <a class="nav-item" data-page="about" href="#">
+      <i class="fa-solid fa-circle-info"></i><span>About</span>
+      <div class="nav-glow"></div>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="threat-meter">
+      <span>Threat Level</span>
+      <div class="meter-bar"><div class="meter-fill" id="threat-meter-fill" style="width: 0%;"></div></div>
+      <span class="meter-label" id="threat-meter-label">LOW</span>
+    </div>
+  </div>
+</aside>
+
+<!-- Hamburger -->
+<button class="hamburger" id="hamburger" aria-label="Toggle menu">
+  <i class="fa-solid fa-bars"></i>
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- ════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════ -->
+<main class="main" id="main">
+
+  <!-- ── PAGE: QR SCANNER ── -->
+  <section class="page active" id="page-scanner">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-qrcode"></i> QR Scanner</h1>
+      <p>Scan QR codes in real-time using your camera</p>
+    </div>
+    <div class="content-grid">
+      <div class="card scanner-card">
+        <div class="card-header">
+          <h3><i class="fa-solid fa-camera"></i> Live Camera Feed</h3>
+          <div class="scanner-controls">
+            <button class="btn btn-primary" id="start-scan-btn"><i class="fa-solid fa-play"></i> Start Scan</button>
+            <button class="btn btn-ghost" id="stop-scan-btn" disabled=""><i class="fa-solid fa-stop"></i> Stop</button>
+          </div>
+        </div>
+        <div id="qr-reader-container">
+          <div id="qr-reader"></div>
+          <div class="scan-overlay" id="scan-overlay">
+            <div class="scan-frame">
+              <div class="corner tl"></div><div class="corner tr"></div>
+              <div class="corner bl"></div><div class="corner br"></div>
+              <div class="scan-line"></div>
+            </div>
+            <p class="scan-tip">Point camera at a QR code</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card result-card">
+        <div class="card-header"><h3><i class="fa-solid fa-brain"></i> AI Analysis Result</h3></div>
+        <div class="result-placeholder" id="scanner-result-placeholder">
+          <div class="placeholder-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+          <p>No QR code scanned yet</p>
+          <span>Start the scanner and point at a QR code</span>
+        </div>
+        <div class="result-content hidden" id="scanner-result-content">
+          <div class="result-badge-container">
+            <div class="result-badge" id="scanner-result-badge"></div>
+          </div>
+          <div class="result-data">
+            <label>Extracted Data</label>
+            <div class="data-box" id="scanner-result-data"></div>
+          </div>
+          <div class="result-analysis" id="scanner-result-analysis"></div>
+          <button class="btn btn-primary full-width" id="scanner-save-btn">
+            <i class="fa-solid fa-clock-rotate-left"></i> View in History
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: UPLOAD ── -->
+  <section class="page" id="page-upload">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-upload"></i> Upload QR Image</h1>
+      <p>Upload a QR code image for AI-powered analysis</p>
+    </div>
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-image"></i> Select Image</h3></div>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="qr-file-input" accept="image/*" hidden="">
+          <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+          <p>Drag &amp; Drop or <span class="link" id="upload-browse-btn">Browse</span></p>
+          <span>Supports PNG, JPG, GIF, WEBP</span>
+        </div>
+        <div class="upload-preview hidden" id="upload-preview">
+          <img id="upload-img-preview" alt="QR Preview">
+        </div>
+        <button class="btn btn-primary full-width mt-1" id="upload-analyze-btn" disabled="">
+          <i class="fa-solid fa-brain"></i> Analyze QR Code
+        </button>
+      </div>
+
+      <div class="card result-card">
+        <div class="card-header"><h3><i class="fa-solid fa-brain"></i> AI Analysis Result</h3></div>
+        <div class="result-placeholder" id="upload-result-placeholder">
+          <div class="placeholder-icon"><i class="fa-solid fa-file-image"></i></div>
+          <p>No image uploaded yet</p>
+          <span>Upload a QR code image to analyze</span>
+        </div>
+        <div class="result-content hidden" id="upload-result-content">
+          <div class="result-badge-container">
+            <div class="result-badge" id="upload-result-badge"></div>
+          </div>
+          <div class="result-data">
+            <label>Extracted Data</label>
+            <div class="data-box" id="upload-result-data"></div>
+          </div>
+          <div class="result-analysis" id="upload-result-analysis"></div>
+          <button class="btn btn-primary full-width" id="upload-save-btn">
+            <i class="fa-solid fa-clock-rotate-left"></i> View in History
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: HISTORY ── -->
+  <section class="page" id="page-history">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-clock-rotate-left"></i> Scan History</h1>
+      <p>All scanned QR codes, stored on the server</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>Scan Records</h3>
+        <button class="btn btn-danger" id="clear-history-btn"><i class="fa-solid fa-trash"></i> Clear All</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="history-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date &amp; Time</th>
+              <th>Content</th>
+              <th>Source</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state hidden" id="history-empty">
+        <i class="fa-solid fa-inbox"></i>
+        <p>No scan history yet</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: DASHBOARD ── -->
+  <section class="page" id="page-dashboard">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-chart-pie"></i> AI Dashboard</h1>
+      <p>Real-time statistics and threat intelligence</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card total">
+        <div class="stat-icon"><i class="fa-solid fa-qrcode"></i></div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-total">0</span>
+          <span class="stat-label">Total Scans</span>
+        </div>
+      </div>
+      <div class="stat-card safe">
+        <div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-safe">0</span>
+          <span class="stat-label">Safe</span>
+        </div>
+      </div>
+      <div class="stat-card suspicious">
+        <div class="stat-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-suspicious">0</span>
+          <span class="stat-label">Suspicious</span>
+        </div>
+      </div>
+      <div class="stat-card malicious">
+        <div class="stat-icon"><i class="fa-solid fa-skull-crossbones"></i></div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-malicious">0</span>
+          <span class="stat-label">Malicious</span>
+        </div>
+      </div>
+    </div>
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-header"><h3>Threat Distribution</h3></div>
+        <div class="chart-container"><canvas id="pie-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Scan Activity</h3></div>
+        <div class="chart-container"><canvas id="bar-chart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: ALERTS ── -->
+  <section class="page" id="page-alerts">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-triangle-exclamation"></i> Threat Alerts</h1>
+      <p>Malicious and suspicious QR codes detected</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Active Threats</h3></div>
+      <div id="alerts-container"></div>
+      <div class="empty-state hidden" id="alerts-empty">
+        <i class="fa-solid fa-shield-halved" style="color:var(--safe)"></i>
+        <p>No threats detected</p>
+        <span>All scanned QR codes are safe</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: URL CHECKER ── -->
+  <section class="page" id="page-urlchecker">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-link"></i> URL Checker</h1>
+      <p>Analyze any URL for security risks</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Enter URL to Analyze</h3></div>
+      <div class="url-input-group">
+        <input type="text" id="url-input" class="text-input" placeholder="https://example.com/path?query=value">
+        <button class="btn btn-primary" id="url-check-btn"><i class="fa-solid fa-magnifying-glass"></i> Analyze</button>
+      </div>
+      <div id="url-result-container" class="hidden">
+        <div class="url-analysis-grid" id="url-analysis-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: REPORTS ── -->
+  <section class="page" id="page-reports">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-file-lines"></i> Reports</h1>
+      <p>Generate and download scan summaries</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>Summary Report</h3>
+        <div class="report-actions">
+          <button class="btn btn-primary" id="download-txt-btn"><i class="fa-solid fa-file-text"></i> Download TXT</button>
+          <button class="btn btn-primary" id="download-csv-btn"><i class="fa-solid fa-file-csv"></i> Download CSV</button>
+          <button class="btn btn-ghost" id="download-json-btn"><i class="fa-solid fa-file-code"></i> JSON</button>
+          <button class="btn btn-ghost" id="print-report-btn"><i class="fa-solid fa-print"></i> Print</button>
+        </div>
+      </div>
+      <div id="report-content"></div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: SETTINGS ── -->
+  <section class="page" id="page-settings">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-gear"></i> Settings</h1>
+      <p>Customize your QR Shield experience</p>
+    </div>
+    <div class="settings-grid">
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-palette"></i> Appearance</h3></div>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span>Dark Mode</span>
+            <small>Toggle between dark and light theme</small>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="dark-mode-toggle" checked="">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-sliders"></i> Detection Sensitivity</h3></div>
+        <div class="setting-item column">
+          <div class="sensitivity-options">
+            <label class="radio-option" data-value="low">
+              <input type="radio" name="sensitivity" value="low">
+              <span class="radio-label">
+                <i class="fa-solid fa-shield"></i>
+                <strong>Low</strong>
+                <small>Fewer false positives</small>
+              </span>
+            </label>
+            <label class="radio-option active" data-value="medium">
+              <input type="radio" name="sensitivity" value="medium" checked="">
+              <span class="radio-label">
+                <i class="fa-solid fa-shield-halved"></i>
+                <strong>Medium</strong>
+                <small>Balanced (recommended)</small>
+              </span>
+            </label>
+            <label class="radio-option" data-value="high">
+              <input type="radio" name="sensitivity" value="high">
+              <span class="radio-label">
+                <i class="fa-solid fa-shield-virus"></i>
+                <strong>High</strong>
+                <small>Maximum protection</small>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-database"></i> Data Management</h3></div>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span>Scan History</span>
+            <small id="history-count-label">0 records stored on server</small>
+          </div>
+          <button class="btn btn-danger" id="settings-clear-btn"><i class="fa-solid fa-trash"></i> Clear</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: ABOUT ── -->
+  <section class="page" id="page-about">
+    <div class="page-header">
+      <h1><i class="fa-solid fa-circle-info"></i> About</h1>
+      <p>AI-Based QR Code Attack Detection for Mobile Security</p>
+    </div>
+    <div class="about-grid">
+      <div class="card about-hero">
+        <div class="about-logo"><i class="fa-solid fa-shield-halved"></i></div>
+        <h2>QR Shield</h2>
+        <p>An intelligent security application that uses AI-powered rule-based detection to identify malicious QR codes before they can harm your device or compromise your data.</p>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-bullseye"></i> Objectives</h3></div>
+        <ul class="about-list">
+          <li><i class="fa-solid fa-check"></i> Real-time QR code scanning via device camera</li>
+          <li><i class="fa-solid fa-check"></i> AI-based threat classification (Safe/Suspicious/Malicious)</li>
+          <li><i class="fa-solid fa-check"></i> URL structure analysis and risk assessment</li>
+          <li><i class="fa-solid fa-check"></i> Server-side scan history (Node.js backend)</li>
+          <li><i class="fa-solid fa-check"></i> Detailed reporting and dashboard analytics</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-code"></i> Technologies Used</h3></div>
+        <div class="tech-grid">
+          <div class="tech-badge"><i class="fa-brands fa-html5"></i> HTML5</div>
+          <div class="tech-badge"><i class="fa-brands fa-css3-alt"></i> CSS3</div>
+          <div class="tech-badge"><i class="fa-brands fa-js"></i> JavaScript ES6+</div>
+          <div class="tech-badge"><i class="fa-solid fa-camera"></i> html5-qrcode</div>
+          <div class="tech-badge"><i class="fa-brands fa-node-js"></i> Node.js + Express</div>
+          <div class="tech-badge"><i class="fa-solid fa-chart-pie"></i> Chart.js</div>
+          <div class="tech-badge"><i class="fa-solid fa-icons"></i> Font Awesome</div>
+          <div class="tech-badge"><i class="fa-solid fa-database"></i> REST API + JSON store</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="fa-solid fa-brain"></i> AI Detection Rules</h3></div>
+        <div class="rules-list">
+          <div class="rule-item malicious"><span class="rule-icon">❌</span><div><strong>Non-HTTPS URLs</strong><small>HTTP connections flagged as malicious</small></div></div>
+          <div class="rule-item malicious"><span class="rule-icon">❌</span><div><strong>IP Address URLs</strong><small>Direct IP access is highly suspicious</small></div></div>
+          <div class="rule-item suspicious"><span class="rule-icon">⚠️</span><div><strong>Phishing Keywords</strong><small>login, verify, bank, free, click, win, prize</small></div></div>
+          <div class="rule-item suspicious"><span class="rule-icon">⚠️</span><div><strong>Suspicious TLDs</strong><small>.tk, .ml, .ga, .cf domains</small></div></div>
+          <div class="rule-item suspicious"><span class="rule-icon">⚠️</span><div><strong>URL Length Anomaly</strong><small>Extremely short or very long URLs</small></div></div>
+          <div class="rule-item safe"><span class="rule-icon">✅</span><div><strong>HTTPS + Known Domain</strong><small>Secure protocol with clean structure</small></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast Notifications -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const Analyzer = (() => {
+/**
+ * QR Shield analysis engine (rule-based scoring).
+ * Returns { verdict: 'safe'|'suspicious'|'malicious', score, type, findings[], summary }
+ */
+
+const SUSPICIOUS_TLDS = ['tk', 'ml', 'ga', 'cf', 'gq', 'xyz', 'top', 'click', 'zip', 'mov', 'work', 'rest', 'icu', 'buzz'];
+const PHISH_KEYWORDS = ['login', 'signin', 'verify', 'verification', 'bank', 'free', 'click', 'win', 'prize',
+  'secure', 'account', 'update', 'confirm', 'password', 'wallet', 'gift', 'claim', 'reward', 'suspend',
+  'unlock', 'bonus', 'urgent', 'kyc', 'otp', 'refund', 'lottery'];
+const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly', 'rebrand.ly',
+  'cutt.ly', 'shorturl.at', 'tiny.cc', 'rb.gy', 'qrco.de', 'bl.ink'];
+const BRANDS = ['paypal', 'google', 'microsoft', 'apple', 'amazon', 'facebook', 'instagram', 'netflix',
+  'paytm', 'phonepe', 'gpay', 'sbi', 'hdfc', 'icici', 'axis', 'whatsapp', 'flipkart'];
+const DANGEROUS_EXT = ['apk', 'exe', 'msi', 'bat', 'cmd', 'scr', 'js', 'vbs', 'jar', 'dmg', 'pkg', 'ps1', 'sh', 'iso'];
+
+const THRESHOLDS = {
+  low: { suspicious: 30, malicious: 65 },
+  medium: { suspicious: 20, malicious: 45 },
+  high: { suspicious: 10, malicious: 30 },
+};
+
+function isIPv4(host) {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(host) && host.split('.').every((n) => Number(n) <= 255);
+}
+function isIPv6(host) { return host.startsWith('[') && host.endsWith(']'); }
+function isDecimalOrHexIP(host) { return /^(0x[0-9a-f]+|\d{8,10})$/i.test(host); }
+
+function registrableDomain(host) {
+  const parts = host.split('.');
+  return parts.slice(-2).join('.');
+}
+
+function classify(content) {
+  const c = content.trim();
+  if (/^https?:\/\//i.test(c)) return 'url';
+  if (/^(upi|paytm|phonepe|tez):\/\//i.test(c)) return 'payment';
+  if (/^wifi:/i.test(c)) return 'wifi';
+  if (/^(sms|smsto|mms):/i.test(c)) return 'sms';
+  if (/^tel:/i.test(c)) return 'phone';
+  if (/^mailto:/i.test(c)) return 'email';
+  if (/^(begin:vcard|mecard:)/i.test(c)) return 'contact';
+  if (/^(geo:|begin:vevent)/i.test(c)) return 'other';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(c)) return 'other-scheme';
+  if (/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(c) && !/\s/.test(c)) return 'bare-domain';
+  return 'text';
+}
+
+function analyzeUrl(raw, add) {
+  let u;
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : 'http://' + raw);
+  } catch {
+    add(40, 'Malformed URL', 'The URL cannot be parsed and may be crafted to evade filters.');
+    return;
+  }
+  const host = u.hostname.toLowerCase();
+  const full = raw.toLowerCase();
+  const hadScheme = /^https?:\/\//i.test(raw);
+
+  // Protocol
+  if (u.protocol === 'http:') {
+    add(hadScheme ? 45 : 20, 'Non-HTTPS connection', 'Uses unencrypted HTTP; traffic can be intercepted or altered.');
+  } else {
+    add(-5, 'HTTPS in use', 'Connection is encrypted (this alone does not prove the site is trustworthy).', 'good');
+  }
+
+  // IP host
+  if (isIPv4(host) || isIPv6(host) || isDecimalOrHexIP(host)) {
+    add(45, 'IP address instead of domain', 'Legitimate services rarely use raw IP addresses; common in phishing and malware hosting.');
+  }
+
+  // Credentials in URL
+  if (u.username || u.password || raw.replace(/^https?:\/\//i, '').split('/')[0].includes('@')) {
+    add(40, 'Credentials / "@" in URL', 'The "@" trick hides the real destination behind a trusted-looking name.');
+  }
+
+  // Punycode / non-ASCII
+  if (host.includes('xn--') || /[^\x00-\x7f]/.test(raw)) {
+    add(30, 'Punycode / lookalike characters', 'Internationalised characters can imitate well-known brands (homograph attack).');
+  }
+
+  // TLD
+  const tld = host.split('.').pop();
+  if (!isIPv4(host) && SUSPICIOUS_TLDS.includes(tld)) {
+    add(25, `Suspicious TLD (.${tld})`, 'This top-level domain is heavily abused for throwaway phishing sites.');
+  }
+
+  // Shorteners
+  if (SHORTENERS.includes(host) || SHORTENERS.includes(registrableDomain(host))) {
+    add(20, 'URL shortener', 'The real destination is hidden behind a redirect and cannot be verified.');
+  }
+
+  // Subdomain depth
+  const labels = host.split('.');
+  if (!isIPv4(host) && labels.length > 4) {
+    add(15, 'Excessive subdomains', `${labels.length} domain levels; attackers nest subdomains to fake a trusted name.`);
+  }
+
+  // Hyphens
+  if ((host.match(/-/g) || []).length >= 3) {
+    add(12, 'Many hyphens in domain', 'Domains like "secure-login-bank-verify.com" are typical for phishing.');
+  }
+
+  // Brand impersonation: brand appears in host but not as registrable domain
+  const reg = registrableDomain(host);
+  for (const b of BRANDS) {
+    if (host.includes(b) && !reg.startsWith(b + '.') ) {
+      add(25, `Possible "${b}" impersonation`, 'A well-known brand name appears in a domain that does not belong to it.');
+      break;
+    }
+  }
+
+  // Keywords (host + path + query)
+  const hay = (host + u.pathname + u.search).toLowerCase();
+  const hits = PHISH_KEYWORDS.filter((k) => new RegExp('(^|[^a-z])' + k).test(hay));
+  if (hits.length) {
+    add(Math.min(10 + hits.length * 6, 30), 'Phishing keywords', `Found: ${hits.slice(0, 8).join(', ')}.`);
+  }
+
+  // Dangerous file download
+  const ext = (u.pathname.split('.').pop() || '').toLowerCase();
+  if (u.pathname.includes('.') && DANGEROUS_EXT.includes(ext)) {
+    add(40, `Downloads a .${ext} file`, 'Executable or installer files delivered via QR code are a common malware vector.');
+  }
+
+  // Non-standard port
+  if (u.port && !['80', '443'].includes(u.port)) {
+    add(15, `Non-standard port (${u.port})`, 'Unusual ports are rarely used by legitimate public websites.');
+  }
+
+  // Length
+  if (raw.length > 120) {
+    add(15, 'Very long URL', `${raw.length} characters; long URLs often hide malicious parameters.`);
+  } else if (raw.length < 12) {
+    add(8, 'Very short URL', 'Extremely short URLs give little context and may be redirectors.');
+  }
+
+  // Encoding / redirect parameters
+  if ((full.match(/%[0-9a-f]{2}/g) || []).length > 6) {
+    add(15, 'Heavy percent-encoding', 'Obfuscated characters can hide the true target or payload.');
+  }
+  if (/[?&](url|redirect|redir|next|goto|return|continue|dest)=https?/i.test(raw)) {
+    add(20, 'Open-redirect parameter', 'The link forwards you to another site specified in the query string.');
+  }
+  if (/(javascript|data|vbscript):/i.test(u.search + u.hash)) {
+    add(40, 'Script injection pattern', 'Query contains a script/data scheme often used in XSS attacks.');
+  }
+}
+
+function analyzeContent(content, opts = {}) {
+  const sensitivity = THRESHOLDS[opts.sensitivity] ? opts.sensitivity : 'medium';
+  const th = THRESHOLDS[sensitivity];
+  const raw = String(content || '').trim();
+  const findings = [];
+  let score = 0;
+
+  const add = (pts, title, detail, level) => {
+    score += pts;
+    findings.push({
+      title, detail, points: pts,
+      level: level || (pts >= 35 ? 'malicious' : 'suspicious'),
+    });
+  };
+
+  const type = classify(raw);
+
+  if (!raw) {
+    add(0, 'Empty content', 'The QR code contained no data.', 'good');
+  } else if (type === 'url' || type === 'bare-domain') {
+    analyzeUrl(raw, add);
+  } else if (type === 'payment') {
+    add(20, 'Payment request QR', 'Payment QR codes can be swapped or tampered with. Check payee name and amount before paying.');
+    if (/[?&]am=/i.test(raw)) add(10, 'Pre-filled amount', 'A payment amount is set in the code; confirm it is what you expect.');
+    if (/[?&]pa=[^&]*@(?:ybl|paytm|okaxis)?/i.test(raw) === false) {
+      add(5, 'Unrecognised payee format', 'The payee address does not look like a standard UPI ID.');
+    }
+  } else if (type === 'wifi') {
+    add(20, 'Wi-Fi configuration', 'Joining an unknown network exposes your traffic. Only connect to networks you trust.');
+    if (/T:\s*nopass/i.test(raw)) add(15, 'Open network', 'No password: traffic is unencrypted.');
+  } else if (type === 'sms') {
+    add(25, 'Pre-written SMS', 'Scanning may prepare a message to a premium or unknown number.');
+  } else if (type === 'phone') {
+    add(15, 'Phone number', 'Calling unknown numbers can lead to vishing or premium-rate charges.');
+  } else if (type === 'email') {
+    add(10, 'Email composition', 'Opens a pre-filled email; verify recipient and body before sending.');
+  } else if (type === 'other-scheme') {
+    const scheme = raw.split(':')[0].toLowerCase();
+    add(35, `Custom app scheme (${scheme}://)`, 'Custom schemes can trigger apps or intents on your device without warning.');
+  } else if (type === 'contact') {
+    add(8, 'Contact card', 'Verify the details before saving to your contacts.');
+  } else {
+    // Plain text – scan for embedded URLs
+    const m = raw.match(/https?:\/\/\S+/i);
+    if (m) {
+      add(10, 'Text with embedded link', 'The text contains a link that was analysed below.');
+      analyzeUrl(m[0], add);
+    } else {
+      add(0, 'Plain text', 'No links or actions detected.', 'good');
+    }
+  }
+
+  if (/<script|onerror\s*=|onload\s*=/i.test(raw)) {
+    add(40, 'Embedded script', 'Content contains HTML/JS that could execute in a vulnerable reader.');
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const verdict = score >= th.malicious ? 'malicious' : score >= th.suspicious ? 'suspicious' : 'safe';
+
+  const bad = findings.filter((f) => f.level !== 'good');
+  const summary = {
+    safe: 'No significant risk indicators were found. It is still wise to verify the destination before entering personal data.',
+    suspicious: `Detected ${bad.length} warning sign(s). Proceed with caution and do not enter credentials or payment details.`,
+    malicious: `Detected ${bad.length} serious risk indicator(s). Do NOT open this link or follow its instructions.`,
+  }[verdict];
+
+  return { verdict, score, type, sensitivity, findings, summary };
+}
+
+
+return { analyzeContent };
+})();
+
+/* In-browser "backend": same API as server.js, used when no server is running.
+   Scans/settings are kept in this browser's localStorage. */
+const LocalEngine = (() => {
+  const KEY_SCANS = 'qrshield-scans', KEY_SET = 'qrshield-settings';
+  const load = (k, fallback) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? fallback : v; } catch { return fallback; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage blocked: keep in memory */ } };
+  let scans = load(KEY_SCANS, []);
+  let settings = load(KEY_SET, { sensitivity: 'medium' });
+  const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const fail = (msg) => { throw new Error(msg); };
+  const validContent = (s) => typeof s === 'string' && s.trim().length > 0 && s.length <= 4096;
+
+  function saveScan(content, source, analysis, extra = {}) {
+    const record = {
+      id: uid(), timestamp: new Date().toISOString(), content, source,
+      verdict: analysis.verdict, score: analysis.score, type: analysis.type,
+      findings: analysis.findings, summary: analysis.summary, sensitivity: analysis.sensitivity, ...extra,
+    };
+    scans.unshift(record);
+    if (scans.length > 2000) scans.length = 2000;
+    save(KEY_SCANS, scans);
+    return record;
+  }
+
+  function computeStats() {
+    const count = (v) => scans.filter((s) => s.verdict === v).length;
+    const safe = count('safe'), suspicious = count('suspicious'), malicious = count('malicious');
+    const days = [];
+    for (let i = 6; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push(d); }
+    const activity = days.map((d) => {
+      const next = new Date(d); next.setDate(next.getDate() + 1);
+      const inDay = scans.filter((s) => { const t = new Date(s.timestamp); return t >= d && t < next; });
+      return {
+        label: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        safe: inDay.filter((s) => s.verdict === 'safe').length,
+        suspicious: inDay.filter((s) => s.verdict === 'suspicious').length,
+        malicious: inDay.filter((s) => s.verdict === 'malicious').length,
+      };
+    });
+    const recent = scans.slice(0, 20);
+    const risk = recent.length ? Math.round(recent.reduce((a, s) => a + (s.verdict === 'malicious' ? 100 : s.verdict === 'suspicious' ? 50 : 0), 0) / recent.length) : 0;
+    const level = risk >= 60 ? 'HIGH' : risk >= 25 ? 'MEDIUM' : 'LOW';
+    return { total: scans.length, safe, suspicious, malicious, activity, threatLevel: { level, percent: risk } };
+  }
+
+  function textReport() {
+    const st = computeStats(), line = '='.repeat(64);
+    const out = [line, '  QR SHIELD — SCAN SUMMARY REPORT', line, `Generated : ${new Date().toLocaleString()}`, `Sensitivity: ${settings.sensitivity}`, '',
+      'SUMMARY', '-'.repeat(64), `Total scans : ${st.total}`, `Safe        : ${st.safe}`, `Suspicious  : ${st.suspicious}`, `Malicious   : ${st.malicious}`,
+      `Threat level: ${st.threatLevel.level} (${st.threatLevel.percent}%)`, '', 'THREATS (suspicious + malicious)', '-'.repeat(64)];
+    const threats = scans.filter((s) => s.verdict !== 'safe');
+    if (!threats.length) out.push('None detected.');
+    threats.forEach((s, i) => {
+      out.push(`${i + 1}. [${s.verdict.toUpperCase()}] score ${s.score}/100 — ${new Date(s.timestamp).toLocaleString()} (${s.source})`, `   ${s.content}`);
+      s.findings.filter((f) => f.level !== 'good').forEach((f) => out.push(`   • ${f.title}: ${f.detail}`));
+      out.push('');
+    });
+    out.push('FULL HISTORY', '-'.repeat(64));
+    if (!scans.length) out.push('No scans recorded.');
+    scans.forEach((s, i) => out.push(`${String(i + 1).padStart(3)}. ${new Date(s.timestamp).toLocaleString()} | ${s.verdict.toUpperCase().padEnd(10)} | ${s.source.padEnd(11)} | ${s.content}`));
+    out.push('', line, 'End of report', line);
+    return out.join('\r\n');
+  }
+  const csvEsc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  function csvReport() {
+    const rows = [['id', 'timestamp', 'source', 'type', 'verdict', 'score', 'content', 'findings']];
+    scans.forEach((s) => rows.push([s.id, s.timestamp, s.source, s.type, s.verdict, s.score, s.content, s.findings.filter((f) => f.level !== 'good').map((f) => f.title).join('; ')]));
+    return '﻿' + rows.map((r) => r.map(csvEsc).join(',')).join('\r\n');
+  }
+  function report(fmt) {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (fmt === 'csv') return { text: csvReport(), mime: 'text/csv;charset=utf-8', name: `qr-shield-report-${stamp}.csv` };
+    if (fmt === 'json') return { text: JSON.stringify({ generated: new Date().toISOString(), stats: computeStats(), scans }, null, 2), mime: 'application/json', name: `qr-shield-report-${stamp}.json` };
+    return { text: textReport(), mime: 'text/plain;charset=utf-8', name: `qr-shield-report-${stamp}.txt` };
+  }
+
+  /* Decode a QR code from an image File in the browser (multi-scale, inverted retries). */
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image file.')); };
+      img.src = url;
+    });
+  }
+  async function decodeFile(file) {
+    if (typeof jsQR === 'undefined') fail('The image decoder failed to load. Check your internet connection and refresh.');
+    const img = await loadImage(file);
+    const max = Math.max(img.naturalWidth, img.naturalHeight);
+    const sizes = [...new Set([Math.min(max, 1000), 600, 1600, 400, 300, 800])].filter((s) => s > 0);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    for (const size of sizes) {
+      const scale = size / max;
+      const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+      canvas.width = w; canvas.height = h;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      let data;
+      try { data = ctx.getImageData(0, 0, w, h); } catch { fail('The browser blocked reading this image.'); }
+      try {
+        const code = jsQR(data.data, w, h, { inversionAttempts: 'attemptBoth' });
+        if (code && code.data) return code.data;
+      } catch { /* blank image: keep trying other sizes */ }
+    }
+    return null;
+  }
+
+  async function handle(path, opts = {}) {
+    const url = new URL(path, 'http://local'), p = url.pathname, method = (opts.method || 'GET').toUpperCase();
+    let body = null;
+    if (typeof opts.body === 'string') { try { body = JSON.parse(opts.body); } catch { body = null; } }
+    const analyze = (text) => Analyzer.analyzeContent(text, { sensitivity: settings.sensitivity });
+
+    if (p === '/api/analyze' && method === 'POST') {
+      if (!body || !validContent(body.content)) fail('Provide QR content (1–4096 chars).');
+      return { scan: saveScan(body.content.trim(), body.source === 'upload' ? 'upload' : 'camera', analyze(body.content)) };
+    }
+    if (p === '/api/url' && method === 'POST') {
+      if (!body || !validContent(body.url)) fail('Provide a URL (1–4096 chars).');
+      return { scan: saveScan(body.url.trim(), 'url-checker', analyze(body.url)) };
+    }
+    if (p === '/api/upload' && method === 'POST') {
+      const file = opts.body && opts.body.get && opts.body.get('image');
+      if (!file) fail('No image uploaded.');
+      if (!/^image\//.test(file.type)) fail('Only image files are allowed');
+      if (file.size > 8 * 1024 * 1024) fail('Image too large (max 8 MB).');
+      const content = await decodeFile(file);
+      if (!content) fail('No QR code could be found in this image. Try a clearer, closer picture.');
+      return { scan: saveScan(content, 'upload', analyze(content), { fileName: file.name }) };
+    }
+    if (p === '/api/history' && method === 'GET') return { scans };
+    if (p === '/api/history' && method === 'DELETE') { scans = []; save(KEY_SCANS, scans); return { ok: true }; }
+    if (p.startsWith('/api/history/') && method === 'DELETE') {
+      const id = decodeURIComponent(p.slice('/api/history/'.length)), before = scans.length;
+      scans = scans.filter((s) => s.id !== id);
+      if (scans.length === before) fail('Not found');
+      save(KEY_SCANS, scans); return { ok: true };
+    }
+    if (p === '/api/stats') return computeStats();
+    if (p === '/api/alerts') return { alerts: scans.filter((s) => s.verdict !== 'safe') };
+    if (p === '/api/settings' && method === 'GET') return settings;
+    if (p === '/api/settings' && method === 'PUT') {
+      if (!body || !['low', 'medium', 'high'].includes(body.sensitivity)) fail('sensitivity must be low, medium or high');
+      settings = { ...settings, sensitivity: body.sensitivity }; save(KEY_SET, settings); return settings;
+    }
+    if (p === '/api/report/preview') return { stats: computeStats(), settings, recent: scans.slice(0, 10) };
+    fail('Unknown request: ' + p);
+  }
+  return { handle, report };
+})();
+
+</script>
+<script>
+/* QR Shield — frontend. All analysis, storage and reports are done by the backend API. */
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const ICONS = { safe: 'fa-circle-check', suspicious: 'fa-circle-exclamation', malicious: 'fa-skull-crossbones' };
+const LABELS = { safe: 'Safe', suspicious: 'Suspicious', malicious: 'Malicious' };
+
+/* ───────── API (server if reachable, otherwise built-in browser engine) ───────── */
+let MODE = 'server', API_BASE = '';
+async function probe(base) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 1500);
+  try { const r = await fetch(base + '/api/settings', { signal: ctl.signal }); const j = await r.json(); return r.ok && j && typeof j.sensitivity === 'string'; }
+  catch { return false; } finally { clearTimeout(t); }
+}
+async function detectMode() {
+  const cands = location.protocol.startsWith('http') ? ['', 'http://localhost:3000'] : ['http://localhost:3000'];
+  for (const c of cands) { if (await probe(c)) { API_BASE = c; MODE = 'server'; return; } }
+  MODE = 'local';
+  $('main').insertAdjacentHTML('afterbegin', '<div class="mode-banner"><i class="fa-solid fa-circle-info"></i> <span><b>Standalone mode:</b> everything runs in your browser and is saved in this browser only. Start the backend (<code>npm start</code>) and open <code>http://localhost:3000</code> to use server mode.</span></div>');
+}
+const modeReady = detectMode();
+async function api(path, opts = {}) {
+  await modeReady;
+  if (MODE === 'local') return LocalEngine.handle(path, opts);
+  let res;
+  try { res = await fetch(API_BASE + path, opts); }
+  catch { throw new Error('Cannot reach the QR Shield server. Is "npm start" still running?'); }
+  let body = null;
+  try { body = await res.json(); } catch { /* non-JSON */ }
+  if (!res.ok) throw new Error((body && body.error) || `Request failed (${res.status})`);
+  return body;
+}
+const postJSON = (path, data) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+/* ───────── Toasts ───────── */
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  $('toast-container').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3500);
+}
+
+/* ───────── Navigation ───────── */
+function showPage(name) {
+  $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-' + name));
+  $$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.page === name));
+  closeSidebar();
+  if (name !== 'scanner') stopScanner();
+  if (name === 'history') loadHistory();
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'alerts') loadAlerts();
+  if (name === 'reports') loadReport();
+  if (name === 'settings') loadSettings();
+  window.scrollTo({ top: 0 });
+}
+$$('.nav-item').forEach((n) => n.addEventListener('click', (e) => { e.preventDefault(); showPage(n.dataset.page); }));
+function closeSidebar() { $('sidebar').classList.remove('open'); $('sidebar-overlay').classList.remove('show'); }
+$('hamburger').addEventListener('click', () => { $('sidebar').classList.toggle('open'); $('sidebar-overlay').classList.toggle('show'); });
+$('sidebar-overlay').addEventListener('click', closeSidebar);
+
+/* ───────── Shared result rendering ───────── */
+function renderResult(prefix, scan) {
+  $(`${prefix}-result-placeholder`).classList.add('hidden');
+  $(`${prefix}-result-content`).classList.remove('hidden');
+  $(`${prefix}-result-badge`).className = 'result-badge ' + scan.verdict;
+  $(`${prefix}-result-badge`).innerHTML = `<i class="fa-solid ${ICONS[scan.verdict]}"></i>${LABELS[scan.verdict]}<small>Risk score ${scan.score}/100</small>`;
+  $(`${prefix}-result-data`).textContent = scan.content; // textContent: never render scanned data as HTML
+  $(`${prefix}-result-analysis`).innerHTML = analysisHTML(scan);
+}
+function analysisHTML(scan) {
+  const findings = scan.findings.map((f) => `
+    <div class="finding ${f.level}">
+      <div><strong>${esc(f.title)}</strong><span>${esc(f.detail)}</span></div>
+      <div class="pts">${f.points > 0 ? '+' : ''}${f.points}</div>
+    </div>`).join('');
+  return `<div class="score-bar"><div class="${scan.verdict}" style="width:${Math.max(scan.score, 3)}%"></div></div>
+    <p class="analysis-summary">${esc(scan.summary)}</p>${findings}`;
+}
+function showLoading(prefix) {
+  $(`${prefix}-result-placeholder`).classList.remove('hidden');
+  $(`${prefix}-result-content`).classList.add('hidden');
+  $(`${prefix}-result-placeholder`).innerHTML = '<div class="spinner"></div><p>Analyzing…</p>';
+}
+function restorePlaceholder(prefix, icon, title, sub) {
+  $(`${prefix}-result-placeholder`).innerHTML = `<div class="placeholder-icon"><i class="fa-solid ${icon}"></i></div><p>${title}</p><span>${sub}</span>`;
+}
+function announce(scan) {
+  if (scan.verdict === 'malicious') toast('⚠ MALICIOUS QR code detected!', 'error');
+  else if (scan.verdict === 'suspicious') toast('Suspicious QR code — be careful.', 'warn');
+  else toast('QR code looks safe.', 'success');
+}
+
+/* ───────── Live scanner ───────── */
+let html5Scanner = null, scanning = false, handling = false;
+
+async function startScanner() {
+  if (scanning) return;
+  if (typeof Html5Qrcode === 'undefined') return toast('Scanner library failed to load (check internet).', 'error');
+  try {
+    html5Scanner = html5Scanner || new Html5Qrcode('qr-reader');
+    await html5Scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 230, height: 230 } },
+      onScanSuccess,
+      () => { /* no QR in this frame */ }
+    );
+    scanning = true;
+    $('start-scan-btn').disabled = true; $('stop-scan-btn').disabled = false;
+    $('scan-overlay').classList.add('off');
+  } catch (e) {
+    toast('Camera unavailable: ' + (e.message || e) + '. Camera needs HTTPS or localhost + permission.', 'error');
+  }
+}
+async function stopScanner() {
+  if (!scanning || !html5Scanner) return;
+  try { await html5Scanner.stop(); html5Scanner.clear(); } catch { /* ignore */ }
+  scanning = false;
+  $('start-scan-btn').disabled = false; $('stop-scan-btn').disabled = true;
+  $('scan-overlay').classList.remove('off');
+}
+async function onScanSuccess(text) {
+  if (handling) return;
+  handling = true;
+  try {
+    await stopScanner();
+    showLoading('scanner');
+    const { scan } = await postJSON('/api/analyze', { content: text, source: 'camera' });
+    renderResult('scanner', scan);
+    announce(scan);
+    refreshBadges();
+  } catch (e) {
+    restorePlaceholder('scanner', 'fa-magnifying-glass', 'Analysis failed', esc(e.message));
+    toast(e.message, 'error');
+  } finally { handling = false; }
+}
+$('start-scan-btn').addEventListener('click', startScanner);
+$('stop-scan-btn').addEventListener('click', stopScanner);
+$('scanner-save-btn').addEventListener('click', () => showPage('history'));
+
+/* ───────── Upload ───────── */
+let selectedFile = null;
+const zone = $('upload-zone'), fileInput = $('qr-file-input');
+zone.addEventListener('click', () => fileInput.click());
+zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragover'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+document.addEventListener('paste', (e) => { // paste image from clipboard on upload page
+  if (!$('page-upload').classList.contains('active')) return;
+  const f = Array.from(e.clipboardData.files || []).find((x) => x.type.startsWith('image/'));
+  if (f) setFile(f);
+});
+
+function setFile(file) {
+  if (!file.type.startsWith('image/')) return toast('Please choose an image file.', 'error');
+  if (file.size > 8 * 1024 * 1024) return toast('Image too large (max 8 MB).', 'error');
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  $('upload-img-preview').src = url;
+  $('upload-preview').classList.remove('hidden');
+  $('upload-analyze-btn').disabled = false;
+}
+$('upload-analyze-btn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  const btn = $('upload-analyze-btn');
+  btn.disabled = true;
+  showLoading('upload');
+  try {
+    const fd = new FormData();
+    fd.append('image', selectedFile);
+    const { scan } = await api('/api/upload', { method: 'POST', body: fd });
+    renderResult('upload', scan);
+    announce(scan);
+    refreshBadges();
+  } catch (e) {
+    restorePlaceholder('upload', 'fa-file-image', 'Could not analyze image', esc(e.message));
+    toast(e.message, 'error');
+  } finally { btn.disabled = false; }
+});
+$('upload-save-btn').addEventListener('click', () => showPage('history'));
+
+/* ───────── History ───────── */
+const fmtDate = (iso) => new Date(iso).toLocaleString();
+const pill = (v) => `<span class="pill ${v}"><i class="fa-solid ${ICONS[v]}"></i>${LABELS[v]}</span>`;
+const SRC = { camera: 'Camera', upload: 'Upload', 'url-checker': 'URL Checker' };
+
+async function loadHistory() {
+  try {
+    const { scans } = await api('/api/history');
+    $('history-tbody').innerHTML = scans.map((s, i) => `
+      <tr>
+        <td>${i + 1}</td><td>${esc(fmtDate(s.timestamp))}</td>
+        <td><div class="cell-content" title="${esc(s.content)}">${esc(s.content)}</div></td>
+        <td>${esc(SRC[s.source] || s.source)}</td>
+        <td>${pill(s.verdict)} <small>${s.score}</small></td>
+        <td><button class="row-del" data-id="${esc(s.id)}" title="Delete"><i class="fa-solid fa-xmark"></i></button></td>
+      </tr>`).join('');
+    $('history-table').classList.toggle('hidden', !scans.length);
+    $('history-empty').classList.toggle('hidden', !!scans.length);
+  } catch (e) { toast(e.message, 'error'); }
+}
+// add an (empty-titled) column for the delete button
+document.querySelector('#history-table thead tr').insertAdjacentHTML('beforeend', '<th></th>');
+$('history-tbody').addEventListener('click', async (e) => {
+  const b = e.target.closest('.row-del'); if (!b) return;
+  try { await api('/api/history/' + encodeURIComponent(b.dataset.id), { method: 'DELETE' }); loadHistory(); refreshBadges(); } catch (err) { toast(err.message, 'error'); }
+});
+async function clearHistory() {
+  if (!confirm('Delete all scan history? This cannot be undone.')) return;
+  try { await api('/api/history', { method: 'DELETE' }); toast('History cleared', 'success'); loadHistory(); loadSettings(); refreshBadges(); } catch (e) { toast(e.message, 'error'); }
+}
+$('clear-history-btn').addEventListener('click', clearHistory);
+$('settings-clear-btn').addEventListener('click', clearHistory);
+
+/* ───────── Dashboard ───────── */
+let pieChart = null, barChart = null;
+function cssVar(n) { return getComputedStyle(document.body).getPropertyValue(n).trim(); }
+
+async function loadDashboard() {
+  try {
+    const st = await api('/api/stats');
+    $('stat-total').textContent = st.total; $('stat-safe').textContent = st.safe;
+    $('stat-suspicious').textContent = st.suspicious; $('stat-malicious').textContent = st.malicious;
+    if (typeof Chart === 'undefined') return;
+    const colors = [cssVar('--safe'), cssVar('--suspicious'), cssVar('--malicious')];
+    const txt = cssVar('--muted'), grid = cssVar('--border');
+
+    if (pieChart) pieChart.destroy();
+    pieChart = new Chart($('pie-chart'), {
+      type: 'doughnut',
+      data: { labels: ['Safe', 'Suspicious', 'Malicious'], datasets: [{ data: [st.safe, st.suspicious, st.malicious], backgroundColor: colors, borderWidth: 0 }] },
+      options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom', labels: { color: txt } } } },
+    });
+    if (barChart) barChart.destroy();
+    barChart = new Chart($('bar-chart'), {
+      type: 'bar',
+      data: {
+        labels: st.activity.map((d) => d.label),
+        datasets: [
+          { label: 'Safe', data: st.activity.map((d) => d.safe), backgroundColor: colors[0] },
+          { label: 'Suspicious', data: st.activity.map((d) => d.suspicious), backgroundColor: colors[1] },
+          { label: 'Malicious', data: st.activity.map((d) => d.malicious), backgroundColor: colors[2] },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        scales: { x: { stacked: true, ticks: { color: txt }, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { color: txt, precision: 0 }, grid: { color: grid } } },
+        plugins: { legend: { position: 'bottom', labels: { color: txt } } },
+      },
+    });
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ───────── Alerts ───────── */
+async function loadAlerts() {
+  try {
+    const { alerts } = await api('/api/alerts');
+    $('alerts-container').innerHTML = alerts.map((a) => `
+      <div class="alert-item ${a.verdict}">
+        <div class="alert-icon"><i class="fa-solid ${a.verdict === 'malicious' ? 'fa-skull-crossbones' : 'fa-triangle-exclamation'}"></i></div>
+        <div class="alert-body">
+          ${pill(a.verdict)} <small>Score ${a.score}/100 · ${esc(SRC[a.source] || a.source)} · ${esc(fmtDate(a.timestamp))}</small>
+          <div class="alert-url">${esc(a.content)}</div>
+          <small>${a.findings.filter((f) => f.level !== 'good').map((f) => esc(f.title)).join(' • ')}</small>
+        </div>
+      </div>`).join('');
+    $('alerts-empty').classList.toggle('hidden', !!alerts.length);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ───────── URL checker ───────── */
+async function checkUrl() {
+  const url = $('url-input').value.trim();
+  if (!url) return toast('Enter a URL first.', 'warn');
+  const btn = $('url-check-btn'); btn.disabled = true;
+  try {
+    const { scan } = await postJSON('/api/url', { url });
+    let parts = '';
+    try {
+      const u = new URL(/^https?:\/\//i.test(url) ? url : 'http://' + url);
+      parts = `<div><b>Protocol:</b> ${esc(u.protocol)}</div><div><b>Host:</b> ${esc(u.hostname)}</div>
+               <div><b>Path:</b> ${esc(u.pathname)}</div><div><b>Query:</b> ${esc(u.search || '—')}</div><div><b>Length:</b> ${url.length}</div>`;
+    } catch { parts = '<div>Could not parse URL structure.</div>'; }
+    $('url-analysis-grid').innerHTML = `
+      <div class="url-box"><h4>Verdict</h4><div class="result-badge ${scan.verdict}"><i class="fa-solid ${ICONS[scan.verdict]}"></i>${LABELS[scan.verdict]}<small>Risk score ${scan.score}/100</small></div></div>
+      <div class="url-box"><h4>URL Structure</h4>${parts}</div>
+      <div class="url-box wide"><h4>AI Analysis</h4>${analysisHTML(scan)}</div>`;
+    $('url-result-container').classList.remove('hidden');
+    announce(scan); refreshBadges();
+  } catch (e) { toast(e.message, 'error'); } finally { btn.disabled = false; }
+}
+$('url-check-btn').addEventListener('click', checkUrl);
+$('url-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') checkUrl(); });
+
+/* ───────── Reports ───────── */
+async function loadReport() {
+  try {
+    const { stats: st, settings, recent } = await api('/api/report/preview');
+    $('report-content').innerHTML = `
+      <p style="color:var(--muted);margin-bottom:1rem">Generated ${esc(new Date().toLocaleString())} · Sensitivity: <b>${esc(settings.sensitivity)}</b> · Threat level: <b>${esc(st.threatLevel.level)}</b></p>
+      <div class="report-stats">
+        <div class="report-stat"><b>${st.total}</b><span>Total scans</span></div>
+        <div class="report-stat"><b style="color:var(--safe)">${st.safe}</b><span>Safe</span></div>
+        <div class="report-stat"><b style="color:var(--suspicious)">${st.suspicious}</b><span>Suspicious</span></div>
+        <div class="report-stat"><b style="color:var(--malicious)">${st.malicious}</b><span>Malicious</span></div>
+      </div>
+      <h4 class="report-section-title">Most recent scans</h4>
+      ${recent.length ? `<div class="table-wrapper"><table class="data-table"><thead><tr><th>Time</th><th>Content</th><th>Source</th><th>Result</th></tr></thead><tbody>
+        ${recent.map((s) => `<tr><td>${esc(fmtDate(s.timestamp))}</td><td><div class="cell-content">${esc(s.content)}</div></td><td>${esc(SRC[s.source] || s.source)}</td><td>${pill(s.verdict)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p style="color:var(--muted)">No scans yet.</p>'}`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+async function downloadReport(fmt) {
+  await modeReady;
+  const a = document.createElement('a');
+  if (MODE === 'local') {
+    const r = LocalEngine.report(fmt);
+    a.href = URL.createObjectURL(new Blob([r.text], { type: r.mime })); a.download = r.name;
+  } else { a.href = API_BASE + '/api/report?format=' + fmt; a.download = ''; }
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Report download started', 'success');
+}
+$('download-txt-btn').addEventListener('click', () => downloadReport('txt'));
+$('download-csv-btn').addEventListener('click', () => downloadReport('csv'));
+$('download-json-btn').addEventListener('click', () => downloadReport('json'));
+$('print-report-btn').addEventListener('click', () => window.print());
+
+/* ───────── Settings ───────── */
+async function loadSettings() {
+  try {
+    const [s, { scans }] = await Promise.all([api('/api/settings'), api('/api/history')]);
+    $$('.radio-option').forEach((o) => {
+      const on = o.dataset.value === s.sensitivity;
+      o.classList.toggle('active', on); o.querySelector('input').checked = on;
+    });
+    $('history-count-label').textContent = `${scans.length} records stored ${MODE === 'local' ? 'in this browser' : 'on the server'}`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+$$('.radio-option').forEach((o) => o.addEventListener('click', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sensitivity: o.dataset.value }) });
+    toast(`Sensitivity set to ${o.dataset.value}`, 'success'); loadSettings();
+  } catch (err) { toast(err.message, 'error'); }
+}));
+
+function applyTheme(dark) {
+  document.body.classList.toggle('dark-mode', dark);
+  $('dark-mode-toggle').checked = dark;
+  try { localStorage.setItem('qrshield-dark', dark ? '1' : '0'); } catch { /* ignore */ }
+}
+$('dark-mode-toggle').addEventListener('change', (e) => { applyTheme(e.target.checked); if ($('page-dashboard').classList.contains('active')) loadDashboard(); });
+
+/* ───────── Sidebar badges & threat meter ───────── */
+async function refreshBadges() {
+  try {
+    const st = await api('/api/stats');
+    $('history-badge').textContent = st.total;
+    $('alert-badge').textContent = st.suspicious + st.malicious;
+    const { level, percent } = st.threatLevel;
+    $('threat-meter-fill').style.width = percent + '%';
+    const lbl = $('threat-meter-label');
+    lbl.textContent = level;
+    lbl.style.color = level === 'HIGH' ? 'var(--malicious)' : level === 'MEDIUM' ? 'var(--suspicious)' : 'var(--safe)';
+  } catch { /* server offline */ }
+}
+
+/* ───────── Init ───────── */
+(function init() {
+  let dark = true;
+  try { const v = localStorage.getItem('qrshield-dark'); if (v !== null) dark = v === '1'; } catch { /* ignore */ }
+  applyTheme(dark);
+  modeReady.then(refreshBadges);
+})();
+
+</script>
+
+
+</body></html>
